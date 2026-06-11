@@ -1,6 +1,14 @@
+import "./style.css";
+
 import L from "leaflet";
+
 import "leaflet/dist/leaflet.css";
+
 import { toJpeg } from "html-to-image";
+
+alert("JavaScript started");
+
+console.log("JavaScript started");
 
 const PROJECT_TITLE = "EMBODIED XXODPI SCANNER SPEED WALK";
 const FILE_PREFIX = "embodied-xxodpi-scanner-speed-walk";
