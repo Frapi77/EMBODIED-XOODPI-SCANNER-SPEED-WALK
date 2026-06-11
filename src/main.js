@@ -1,5 +1,4 @@
 import "./style.css";
-
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { toJpeg } from "html-to-image";
@@ -10,6 +9,10 @@ const RECIPIENT_EMAIL = "mail.francescopi@gmail.com";
 
 const SCANNER_SPEED_M_PER_HOUR = 883;
 const SCANNER_SPEED_M_PER_SECOND = SCANNER_SPEED_M_PER_HOUR / 3600;
+const GPS_MAX_ACCURACY_M = 10;
+const GPS_MIN_MOVEMENT_M = 3;
+const GPS_MAX_WALKING_SPEED_MPS = 2.0;
+const STEP_MATCH_WINDOW_S = 2.0;
 
 const state = {
   page: "welcome",
@@ -48,9 +51,10 @@ const state = {
   maxEarlyStepS: 0,
   attunementScore: 0,
 
-  gpsTrack: [],
-  distanceM: 0,
-
+gpsTrack: [],
+gpsDistanceM: 0,
+stepDistanceM: 0,
+lastGpsAccuracyM: null,
   reflectionActivity: "",
   reflectionDifficulty: "",
   reflectionNotes: "",
@@ -126,11 +130,12 @@ async function ensureAudioContext() {
   }
 }
 
-function playScannerBeep() {
+async function playScannerBeep() {
+  await ensureAudioContext();
+
   if (!audioContext) return;
 
   const now = audioContext.currentTime;
-
   const oscillator = audioContext.createOscillator();
   const gain = audioContext.createGain();
 
@@ -188,8 +193,9 @@ function resetSessionData() {
   state.attunementScore = 0;
 
   state.gpsTrack = [];
-  state.distanceM = 0;
-
+state.gpsDistanceM = 0;
+state.stepDistanceM = 0;
+state.lastGpsAccuracyM = null;
   resetMotionSignal();
 }
 
@@ -277,13 +283,19 @@ function recordTheoreticalStep() {
     matched: false,
   });
 
-  playScannerBeep();
+  void playScannerBeep();
 }
 
 function recordDetectedStep(source = "manual") {
   if (!state.sessionStartedAt || state.sessionEndedAt) return;
 
   state.detectedStepIndex += 1;
+
+const stepLengthM = Number(state.stepLengthCm) / 100;
+
+if (Number.isFinite(stepLengthM) && stepLengthM > 0) {
+  state.stepDistanceM += stepLengthM;
+}
 
   const actualTimeS = getSessionTimeS();
 
@@ -295,8 +307,11 @@ function recordDetectedStep(source = "manual") {
 
   const closest = findClosestTheoreticalStep(actualTimeS);
 
-  if (closest) {
-    closest.matched = true;
+if (
+  closest &&
+  Math.abs(actualTimeS - closest.theoreticalTimeS) <= STEP_MATCH_WINDOW_S
+) 
+{    closest.matched = true;
 
     const misalignmentS = actualTimeS - closest.theoreticalTimeS;
 
@@ -414,10 +429,9 @@ function shouldUseGpsPoint(point) {
   return (
     Number.isFinite(point.accuracyM) &&
     point.accuracyM > 0 &&
-    point.accuracyM <= 100
+    point.accuracyM <= GPS_MAX_ACCURACY_M
   );
 }
-
 function buildGpsPoint(position) {
   return {
     latitude: position.coords.latitude,
@@ -435,6 +449,8 @@ function addGpsPoint(position) {
 
   if (!shouldUseGpsPoint(point)) return;
 
+  state.lastGpsAccuracyM = point.accuracyM;
+
   if (state.gpsTrack.length === 0) {
     state.gpsTrack.push(point);
     updateWalkMetrics();
@@ -442,6 +458,7 @@ function addGpsPoint(position) {
   }
 
   const previous = state.gpsTrack[state.gpsTrack.length - 1];
+
   const segmentDistance = haversineDistanceMeters(
     previous.latitude,
     previous.longitude,
@@ -450,17 +467,24 @@ function addGpsPoint(position) {
   );
 
   const timeDiffS = point.timeS - previous.timeS;
-  const speedMps =
-    timeDiffS > 0 ? segmentDistance / timeDiffS : Number.POSITIVE_INFINITY;
 
-  if (speedMps <= 3.5) {
-    state.distanceM += segmentDistance;
-    state.gpsTrack.push(point);
+  if (timeDiffS <= 0) return;
+
+  const speedMps = segmentDistance / timeDiffS;
+
+  if (segmentDistance < GPS_MIN_MOVEMENT_M) {
+    return;
   }
+
+  if (speedMps > GPS_MAX_WALKING_SPEED_MPS) {
+    return;
+  }
+
+  state.gpsDistanceM += segmentDistance;
+  state.gpsTrack.push(point);
 
   updateWalkMetrics();
 }
-
 function enableGps() {
   if (!navigator.geolocation) {
     alert("Geolocation is not supported on this device/browser.");
@@ -512,7 +536,7 @@ function startGpsWatch() {
     },
     {
       enableHighAccuracy: true,
-      maximumAge: 1000,
+      maximumAge: 0,
       timeout: 10000,
     }
   );
@@ -576,9 +600,19 @@ function updateWalkMetrics() {
   const gpsPoints = document.querySelector("#gps-points");
   if (gpsPoints) gpsPoints.textContent = state.gpsTrack.length;
 
-  const distance = document.querySelector("#distance");
-  if (distance) distance.textContent = `${state.distanceM.toFixed(2)} m`;
+const gpsDistance = document.querySelector("#gps-distance");
+if (gpsDistance) gpsDistance.textContent = `${state.gpsDistanceM.toFixed(2)} m`;
 
+const stepDistance = document.querySelector("#step-distance");
+if (stepDistance) stepDistance.textContent = `${state.stepDistanceM.toFixed(2)} m`;
+
+const gpsAccuracy = document.querySelector("#gps-accuracy");
+if (gpsAccuracy) {
+  gpsAccuracy.textContent =
+    state.lastGpsAccuracyM === null
+      ? "n/a"
+      : `${state.lastGpsAccuracyM.toFixed(1)} m`;
+}
   const motionSignal = document.querySelector("#motion-signal");
   if (motionSignal) motionSignal.textContent = state.motionSignal.toFixed(3);
 }
@@ -644,8 +678,8 @@ function buildCsvString() {
   rows.push([]);
   rows.push(["ROUTE_METRICS"]);
   rows.push(["metric", "value", "unit"]);
-  rows.push(["distance", state.distanceM.toFixed(3), "m"]);
-  rows.push(["gps_points", state.gpsTrack.length, "count"]);
+rows.push(["distance_steps", state.stepDistanceM.toFixed(3), "m"]);
+rows.push(["distance_gps", state.gpsDistanceM.toFixed(3), "m"]);  rows.push(["gps_points", state.gpsTrack.length, "count"]);
 
   if (state.gpsTrack.length > 0) {
     const first = state.gpsTrack[0];
@@ -718,8 +752,8 @@ function buildGeoJsonString() {
           project_title: PROJECT_TITLE,
           nickname: state.nickname || "anonymous",
           exported_at: new Date().toISOString(),
-          distance_m: Number(state.distanceM.toFixed(3)),
-          gps_points: state.gpsTrack.length,
+          distance_steps_m: Number(state.stepDistanceM.toFixed(3)),
+distance_gps_m: Number(state.gpsDistanceM.toFixed(3)),          gps_points: state.gpsTrack.length,
         },
         geometry: {
           type: "LineString",
@@ -831,8 +865,8 @@ function prepareEmail() {
 
   const subject = encodeURIComponent(`${nickname} - ${PROJECT_TITLE}`);
 
-  const body = encodeURIComponent(
-    `Session data from ${nickname}.
+const body = encodeURIComponent(
+  `Session data from ${nickname}.
 
 Please attach the downloaded session files.
 
@@ -843,12 +877,13 @@ Matched steps: ${state.alignmentRows.length}
 Average temporal drift: ${formatS(state.averageDriftS)} s
 Average absolute drift: ${formatS(state.averageAbsoluteDriftS)} s
 Attunement score: ${state.attunementScore.toFixed(1)}%
-Distance: ${state.distanceM.toFixed(2)} m
+Distance from steps: ${state.stepDistanceM.toFixed(2)} m
+Distance from GPS: ${state.gpsDistanceM.toFixed(2)} m
 GPS points: ${state.gpsTrack.length}`
-  );
+);
 
-  window.location.href = `mailto:${RECIPIENT_EMAIL}?subject=${subject}&body=${body}`;
-}
+window.location.href =
+  `mailto:${RECIPIENT_EMAIL}?subject=${subject}&body=${body}`;
 
 function destroyResultsMap() {
   if (resultsMap) {
@@ -1179,10 +1214,21 @@ function render() {
             </div>
 
             <div class="metric-card">
-              <span class="metric-label">Distance</span>
-              <span class="metric-value" id="distance">${state.distanceM.toFixed(2)} m</span>
-            </div>
+  <span class="metric-label">Distance from steps</span>
+  <span class="metric-value" id="step-distance">${state.stepDistanceM.toFixed(2)} m</span>
+</div>
 
+<div class="metric-card">
+  <span class="metric-label">Distance from GPS</span>
+  <span class="metric-value" id="gps-distance">${state.gpsDistanceM.toFixed(2)} m</span>
+</div>
+
+<div class="metric-card">
+  <span class="metric-label">GPS accuracy</span>
+  <span class="metric-value" id="gps-accuracy">${
+    state.lastGpsAccuracyM === null ? "n/a" : `${state.lastGpsAccuracyM.toFixed(1)} m`
+  }</span>
+</div>
             <div class="metric-card">
               <span class="metric-label">Motion signal</span>
               <span class="metric-value" id="motion-signal">${state.motionSignal.toFixed(3)}</span>
@@ -1302,11 +1348,24 @@ function render() {
               <span class="metric-value">${state.attunementScore.toFixed(1)}%</span>
             </div>
 
-            <div class="metric-card">
-              <span class="metric-label">Distance</span>
-              <span class="metric-value">${state.distanceM.toFixed(2)} m</span>
-            </div>
+<div class="metric-card">
+  <span class="metric-label">Distance from steps</span>
+  <span class="metric-value">${state.stepDistanceM.toFixed(2)} m</span>
+</div>
 
+<div class="metric-card">
+  <span class="metric-label">Distance from GPS</span>
+  <span class="metric-value">${state.gpsDistanceM.toFixed(2)} m</span>
+</div>
+
+<div class="metric-card">
+  <span class="metric-label">Last GPS accuracy</span>
+  <span class="metric-value">${
+    state.lastGpsAccuracyM === null
+      ? "n/a"
+      : `${state.lastGpsAccuracyM.toFixed(1)} m`
+  }</span>
+</div>
             <div class="metric-card">
               <span class="metric-label">GPS points</span>
               <span class="metric-value">${state.gpsTrack.length}</span>
