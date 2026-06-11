@@ -1,3 +1,4 @@
+import "./style.css";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { toJpeg } from "html-to-image";
