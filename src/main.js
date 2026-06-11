@@ -1473,8 +1473,3 @@ function bindEvents() {
 }
 
 render();
-    });
-  });
-}
-
-render();
