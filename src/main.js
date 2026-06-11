@@ -884,7 +884,7 @@ GPS points: ${state.gpsTrack.length}`
 
 window.location.href =
   `mailto:${RECIPIENT_EMAIL}?subject=${subject}&body=${body}`;
-
+  }
 function destroyResultsMap() {
   if (resultsMap) {
     resultsMap.remove();
