@@ -6,8 +6,6 @@ import "leaflet/dist/leaflet.css";
 
 import { toJpeg } from "html-to-image";
 
-
-
 const PROJECT_TITLE = "EMBODIED XXODPI SCANNER SPEED WALK";
 const FILE_PREFIX = "embodied-xxodpi-scanner-speed-walk";
 const RECIPIENT_EMAIL = "mail.francescopi@gmail.com";
