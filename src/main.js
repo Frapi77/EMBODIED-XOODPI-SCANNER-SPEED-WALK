@@ -871,6 +871,31 @@ async function downloadAllFiles() {
       `${nickname}-${FILE_PREFIX}-track-${timestamp}.geojson`,
       buildGeoJsonString()
     );
+
+    const mapElement = document.querySelector("#results-map");
+
+    if (mapElement) {
+      try {
+        await new Promise((resolve) => window.setTimeout(resolve, 700));
+
+        const dataUrl = await toJpeg(mapElement, {
+          cacheBust: true,
+          pixelRatio: 2,
+          backgroundColor: "#ffffff",
+        });
+
+        const response = await fetch(dataUrl);
+        const mapBlob = await response.blob();
+
+        zip.file(
+          `${nickname}-${FILE_PREFIX}-map-${timestamp}.jpg`,
+          mapBlob
+        );
+      } catch (error) {
+        console.error(error);
+        alert("Map JPEG could not be added to the ZIP. CSV, GPX and GeoJSON will still be included.");
+      }
+    }
   }
 
   const blob = await zip.generateAsync({
@@ -887,7 +912,6 @@ async function downloadAllFiles() {
     "application/zip"
   );
 }
-
 function prepareEmail() {
   const nickname = state.nickname || "anonymous";
 
