@@ -850,15 +850,42 @@ async function downloadMapJpeg() {
     alert("Map JPEG export failed. Try downloading CSV, GPX or GeoJSON instead.");
   }
 }
-
 async function downloadAllFiles() {
-  downloadCsv();
+  const nickname = safeFilenameText(state.nickname);
+  const timestamp = safeIsoFilenamePart();
+
+  const zip = new JSZip();
+
+  zip.file(
+    `${nickname}-${FILE_PREFIX}-session-${timestamp}.csv`,
+    buildCsvString()
+  );
 
   if (state.gpsTrack.length > 0) {
-    downloadGpx();
-    downloadGeoJson();
-    await downloadMapJpeg();
+    zip.file(
+      `${nickname}-${FILE_PREFIX}-track-${timestamp}.gpx`,
+      buildGpxString()
+    );
+
+    zip.file(
+      `${nickname}-${FILE_PREFIX}-track-${timestamp}.geojson`,
+      buildGeoJsonString()
+    );
   }
+
+  const blob = await zip.generateAsync({
+    type: "blob",
+    compression: "DEFLATE",
+    compressionOptions: {
+      level: 9,
+    },
+  });
+
+  downloadBlob(
+    blob,
+    `${nickname}-${FILE_PREFIX}-package-${timestamp}.zip`,
+    "application/zip"
+  );
 }
 
 function prepareEmail() {
