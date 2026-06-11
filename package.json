@@ -1,1 +1,19 @@
-
+{
+  "name": "embodied-xoodpi-scanner-speed-walk",
+  "version": "1.0.0",
+  "description": "Public scanner speed walk performance app",
+  "private": false,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "html-to-image": "^1.11.13",
+    "leaflet": "^1.9.4"
+  },
+  "devDependencies": {
+    "vite": "^5.4.21"
+  }
+}
