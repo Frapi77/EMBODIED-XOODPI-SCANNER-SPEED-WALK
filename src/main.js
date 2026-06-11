@@ -1,9 +1,7 @@
 import "./style.css";
 
 import L from "leaflet";
-
 import "leaflet/dist/leaflet.css";
-
 import { toJpeg } from "html-to-image";
 
 const PROJECT_TITLE = "EMBODIED XXODPI SCANNER SPEED WALK";
@@ -61,6 +59,7 @@ const state = {
 let timer = null;
 let theoreticalTimer = null;
 let gpsWatchId = null;
+let audioContext = null;
 
 let lastDetectedStepTime = 0;
 let previousSignal = 0;
@@ -109,6 +108,45 @@ function applySensitivity(value) {
 }
 
 applySensitivity(state.sensitivity);
+
+async function ensureAudioContext() {
+  if (!audioContext) {
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+
+    if (!AudioCtor) {
+      alert("Audio is not supported on this browser.");
+      return;
+    }
+
+    audioContext = new AudioCtor();
+  }
+
+  if (audioContext.state === "suspended") {
+    await audioContext.resume();
+  }
+}
+
+function playScannerBeep() {
+  if (!audioContext) return;
+
+  const now = audioContext.currentTime;
+
+  const oscillator = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+
+  oscillator.type = "sine";
+  oscillator.frequency.setValueAtTime(880, now);
+
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.35, now + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+
+  oscillator.connect(gain);
+  gain.connect(audioContext.destination);
+
+  oscillator.start(now);
+  oscillator.stop(now + 0.18);
+}
 
 function getSessionTimeS() {
   if (!state.sessionStartedAt) return 0;
@@ -238,6 +276,8 @@ function recordTheoreticalStep() {
     theoreticalTimeS,
     matched: false,
   });
+
+  playScannerBeep();
 }
 
 function recordDetectedStep(source = "manual") {
@@ -485,8 +525,10 @@ function stopGpsWatch() {
   }
 }
 
-function startSession() {
+async function startSession() {
   resetSessionData();
+
+  await ensureAudioContext();
 
   state.sessionStartedAt = Date.now();
   state.sessionEndedAt = null;
@@ -1048,6 +1090,12 @@ function render() {
               <span class="metric-value">${formatS(state.calculatedIntervalS)} s</span>
             </div>
 
+            <p>
+              When the session starts, you will hear one acoustic signal for each
+              theoretical scanner step. Each signal indicates the moment at which
+              you should attempt to take a step while continuing your daily activity.
+            </p>
+
             <label class="field">
               <span>Detection sensitivity</span>
               <input id="sensitivity-slider" type="range" min="1" max="10" step="1" value="${state.sensitivity}">
@@ -1072,12 +1120,12 @@ function render() {
             <button id="enable-gps" class="secondary-button">Enable GPS optional</button>
 
             <p>
-              During the activity, try to let this rhythm accompany your movement
+              During the activity, let the acoustic signal accompany your movement
               without interrupting what you are already doing.
             </p>
 
             <button id="to-walk" class="primary-button" ${!state.motionEnabled ? "disabled" : ""}>
-              Start session
+              Start session with acoustic cue
             </button>
           </div>
         </section>
@@ -1099,9 +1147,10 @@ function render() {
             <p>Continue with the activity you intended to do.</p>
 
             <p>
-              As you move, try to attune your pace to the rhythm proposed by
-              the scanner. The objective is not precision, but a negotiation
-              between the scanner's pace and the demands of everyday activity.
+              You will hear an acoustic signal at each theoretical scanner step.
+              Each signal marks the moment at which you should attempt to take a
+              step. The objective is not precision, but an attunement attempt
+              between your daily activity and the scanner's pace.
             </p>
 
             <div class="metric-card">
@@ -1110,7 +1159,7 @@ function render() {
             </div>
 
             <div class="metric-card">
-              <span class="metric-label">Theoretical steps</span>
+              <span class="metric-label">Theoretical steps / acoustic cues</span>
               <span class="metric-value" id="theoretical-steps">${state.theoreticalSteps.length}</span>
             </div>
 
@@ -1347,7 +1396,7 @@ function bindEvents() {
     enableGps();
   });
 
-  document.querySelector("#to-walk")?.addEventListener("click", () => {
+  document.querySelector("#to-walk")?.addEventListener("click", async () => {
     if (!state.motionEnabled) {
       alert("Please enable motion detection before starting.");
       return;
@@ -1355,7 +1404,7 @@ function bindEvents() {
 
     state.page = "walk";
     render();
-    startSession();
+    await startSession();
   });
 
   document.querySelector("#record-step")?.addEventListener("click", () => {
@@ -1419,6 +1468,11 @@ function bindEvents() {
       else if (state.page === "setup") state.page = "consent";
       else if (state.page === "calibration") state.page = "setup";
       render();
+    });
+  });
+}
+
+render();
     });
   });
 }
