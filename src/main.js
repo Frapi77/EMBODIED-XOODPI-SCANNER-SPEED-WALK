@@ -922,6 +922,15 @@ const body = encodeURIComponent(
 
 Please attach the downloaded session files.
 
+function prepareEmail() {
+ const nickname = state.nickname || "anonymous";
+ const subject = encodeURIComponent(`${nickname} - ${PROJECT_TITLE}`);
+
+ const body = encodeURIComponent(
+`Session data from ${nickname}.
+
+Please attach the downloaded session files.
+
 Project: ${PROJECT_TITLE}
 Duration: ${formatS(state.elapsedS)} s
 Theoretical step interval: ${formatS(state.calculatedIntervalS)} s
@@ -931,12 +940,17 @@ Average absolute drift: ${formatS(state.averageAbsoluteDriftS)} s
 Attunement score: ${state.attunementScore.toFixed(1)}%
 Distance from steps: ${state.stepDistanceM.toFixed(2)} m
 Distance from GPS: ${state.gpsDistanceM.toFixed(2)} m
-GPS points: ${state.gpsTrack.length}`
-);
+GPS points: ${state.gpsTrack.length}
 
-window.location.href =
+OPTIONAL REFLECTION
+Activity: ${state.reflectionActivity || "not provided"}
+Difficulty: ${state.reflectionDifficulty || "not provided"}
+Notes: ${state.reflectionNotes || "not provided"}`
+ );
+
+ window.location.href =
   `mailto:${RECIPIENT_EMAIL}?subject=${subject}&body=${body}`;
-  }
+}
 function destroyResultsMap() {
   if (resultsMap) {
     resultsMap.remove();
