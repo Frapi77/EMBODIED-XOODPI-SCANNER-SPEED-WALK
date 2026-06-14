@@ -914,19 +914,9 @@ async function downloadAllFiles() {
 }
 function prepareEmail() {
   const nickname = state.nickname || "anonymous";
-
   const subject = encodeURIComponent(`${nickname} - ${PROJECT_TITLE}`);
 
-const body = encodeURIComponent(
-  `Session data from ${nickname}.
-
-Please attach the downloaded session files.
-
-function prepareEmail() {
- const nickname = state.nickname || "anonymous";
- const subject = encodeURIComponent(`${nickname} - ${PROJECT_TITLE}`);
-
- const body = encodeURIComponent(
+  const body = encodeURIComponent(
 `Session data from ${nickname}.
 
 Please attach the downloaded session files.
@@ -946,10 +936,10 @@ OPTIONAL REFLECTION
 Activity: ${state.reflectionActivity || "not provided"}
 Difficulty: ${state.reflectionDifficulty || "not provided"}
 Notes: ${state.reflectionNotes || "not provided"}`
- );
+  );
 
- window.location.href =
-  `mailto:${RECIPIENT_EMAIL}?subject=${subject}&body=${body}`;
+  window.location.href =
+    `mailto:${RECIPIENT_EMAIL}?subject=${subject}&body=${body}`;
 }
 function destroyResultsMap() {
   if (resultsMap) {
